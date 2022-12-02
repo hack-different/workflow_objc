@@ -10,6 +10,7 @@
 #include "BinaryNinja.h"
 
 #include "Core/AnalysisInfo.h"
+#include "MessageHandler.h"
 
 using SharedAnalysisInfo = std::shared_ptr<ObjectiveNinja::AnalysisInfo>;
 
@@ -38,6 +39,10 @@ public:
      */
     static SharedAnalysisInfo analysisInfo(BinaryViewRef);
 
+    /**
+     * Get ObjC Message Handler for a view
+     */
+    static MessageHandler* messageHandler(BinaryViewRef);
     /**
      * Store analysis info for a view.
      */

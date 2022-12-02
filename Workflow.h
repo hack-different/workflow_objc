@@ -24,15 +24,6 @@ constexpr auto ResolveMethodCalls = "core.function.objectiveC.resolveMethodCalls
 class Workflow {
 
     /**
-     * Get the addresses of all usable `_objc_msgSend` functions.
-     *
-     * Not all `_objc_msgSend` functions in the binary are usable, and there
-     * may also be more than one usable candidate. For additional details and
-     * specifics, see this function's implementation.
-     */
-    static std::set<uint64_t> findMsgSendFunctions(BinaryViewRef);
-
-    /**
      * Attempt to rewrite the `objc_msgSend` call at `insnIndex` with a direct
      * call to the requested method's implementation.
      *

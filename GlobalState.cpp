@@ -11,7 +11,19 @@
 #include <unordered_map>
 
 static std::unordered_map<BinaryViewID, SharedAnalysisInfo> g_analysisRecords;
+static std::unordered_map<BinaryViewID, MessageHandler*> g_messageHandlers;
 static std::set<BinaryViewID> g_ignoredViews;
+
+MessageHandler* GlobalState::messageHandler(BinaryViewRef bv)
+{
+    if (auto messageHandler = g_messageHandlers.find(id(bv)); messageHandler != g_messageHandlers.end()) {
+        return messageHandler->second;
+    } else {
+        auto newMessageHandler = new MessageHandler(bv);
+        g_messageHandlers[id(bv)] = newMessageHandler;
+        return newMessageHandler;
+    }
+}
 
 BinaryViewID GlobalState::id(BinaryViewRef bv)
 {

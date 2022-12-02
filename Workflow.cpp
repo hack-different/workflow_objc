@@ -25,55 +25,6 @@ static std::mutex g_initialAnalysisMutex;
 using SectionRef = BinaryNinja::Ref<BinaryNinja::Section>;
 using SymbolRef = BinaryNinja::Ref<BinaryNinja::Symbol>;
 
-std::set<uint64_t> Workflow::findMsgSendFunctions(BinaryViewRef bv)
-{
-    std::set<uint64_t> results;
-
-    const auto authStubsSection = bv->GetSectionByName("__auth_stubs");
-    const auto stubsSection = bv->GetSectionByName("__stubs");
-    const auto authGotSection = bv->GetSectionByName("__auth_got");
-    const auto gotSection = bv->GetSectionByName("__got");
-    const auto laSymbolPtrSection = bv->GetSectionByName("__la_symbol_ptr");
-
-    // Shorthand to check if a symbol lies in a given section.
-    auto sectionContains = [](SectionRef section, SymbolRef symbol) {
-        const auto start = section->GetStart();
-        const auto length = section->GetLength();
-        const auto address = symbol->GetAddress();
-
-        return (uint64_t)(address - start) <= length;
-    };
-
-    // There can be multiple `_objc_msgSend` symbols in the same binary; there
-    // may even be lots. Some of them are valid, others aren't. In order of
-    // preference, `_objc_msgSend` symbols in the following sections are
-    // preferred:
-    //
-    //   1. __auth_stubs
-    //   2. __stubs
-    //   3. __auth_got
-    //   4. __got
-    //   ?. __la_symbol_ptr
-    //
-    // There is often an `_objc_msgSend` symbol that is a stub function, found
-    // in the `__stubs` section, which will come with an imported symbol of the
-    // same name in the `__got` section. Not all `__objc_msgSend` calls will be
-    // routed through the stub function, making it important to make note of
-    // both symbols' addresses. Furthermore, on ARM64, the `__auth{stubs,got}`
-    // sections are preferred over their unauthenticated counterparts.
-    const auto candidates = bv->GetSymbolsByName("_objc_msgSend");
-    for (const auto& c : candidates) {
-        if ((authStubsSection && sectionContains(authStubsSection, c))
-            || (stubsSection && sectionContains(stubsSection, c))
-            || (authGotSection && sectionContains(authGotSection, c))
-            || (gotSection && sectionContains(gotSection, c))
-            || (laSymbolPtrSection && sectionContains(laSymbolPtrSection, c)))
-            results.insert(c->GetAddress());
-    }
-
-    return results;
-}
-
 void Workflow::rewriteMethodCall(LLILFunctionRef ssa, size_t insnIndex)
 {
     const auto bv = ssa->GetFunction()->GetView();
@@ -159,6 +110,7 @@ void Workflow::inlineMethodCalls(AnalysisContextRef ac)
         if (!GlobalState::hasAnalysisInfo(bv)) {
             SharedAnalysisInfo info;
             CustomTypes::defineAll(bv);
+            auto messageHandler = GlobalState::messageHandler(bv);
 
             try {
                 auto file = std::make_shared<ObjectiveNinja::BinaryViewFile>(bv);
@@ -172,7 +124,7 @@ void Workflow::inlineMethodCalls(AnalysisContextRef ac)
 
                 InfoHandler::applyInfoToView(info, bv);
 
-                const auto msgSendFunctions = findMsgSendFunctions(bv);
+                const auto msgSendFunctions = messageHandler->getMessageSendFunctions();
                 for (auto addr : msgSendFunctions)
                 {
                     BinaryNinja::QualifiedNameAndType nameAndType;
@@ -209,12 +161,8 @@ void Workflow::inlineMethodCalls(AnalysisContextRef ac)
         }
     }
 
-    // Try to find the `objc_msgSend` functions(s), abort activity if missing.
-    //
-    // TODO: These results should be cached somehow as it can't be efficient to
-    // repeatedly search for all the usable function addresses.
-    const auto msgSendFunctions = findMsgSendFunctions(bv);
-    if (msgSendFunctions.empty()) {
+    auto messageHandler = GlobalState::messageHandler(bv);
+    if (!messageHandler->hasMessageSendFunctions()) {
         log->LogError("Cannot perform Objective-C IL cleanup; no objc_msgSend candidates found");
         GlobalState::addIgnoredView(bv);
         return;
@@ -231,7 +179,7 @@ void Workflow::inlineMethodCalls(AnalysisContextRef ac)
         return;
     }
 
-    const auto rewriteIfEligible = [msgSendFunctions, ssa](size_t insnIndex) {
+    const auto rewriteIfEligible = [messageHandler, ssa](size_t insnIndex) {
         auto insn = ssa->GetInstruction(insnIndex);
 
         if (insn.operation != LLIL_CALL_SSA)
@@ -239,7 +187,7 @@ void Workflow::inlineMethodCalls(AnalysisContextRef ac)
 
         // Filter out calls that aren't to `objc_msgSend`.
         auto callExpr = insn.GetDestExpr<LLIL_CALL_SSA>();
-        if (!msgSendFunctions.count(callExpr.GetValue().value))
+        if (!messageHandler->isMessageSend(callExpr.GetValue().value))
             return;
 
         // By convention, the selector is the second argument to `objc_msgSend`,
