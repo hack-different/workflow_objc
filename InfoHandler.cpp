@@ -194,6 +194,8 @@ void InfoHandler::applyInfoToView(SharedAnalysisInfo info, BinaryViewRef bv)
     auto ivarListType = namedType(bv, CustomTypes::IvarList);
     auto ivarType = namedType(bv, CustomTypes::Ivar);
 
+    auto objcComponent = bv->CreateComponentWithName("Objective-C Classes");
+
     // Create data variables and symbols for all CFString instances.
     for (const auto& csi : info->cfStrings) {
         reader.Seek(csi.dataAddress);
@@ -226,10 +228,15 @@ void InfoHandler::applyInfoToView(SharedAnalysisInfo info, BinaryViewRef bv)
 
     // Create data variables and symbols for the analyzed classes.
     for (const auto& ci : info->classes) {
+        auto classComponent = bv->CreateComponentWithName(ci.name, objcComponent);
         defineVariable(bv, ci.listPointer, taggedPointerType);
         defineVariable(bv, ci.address, classType);
         defineVariable(bv, ci.dataAddress, classDataType);
         defineVariable(bv, ci.nameAddress, stringType(ci.name.size()));
+        classComponent->AddDataVariable({ci.listPointer, taggedPointerType, true});
+        classComponent->AddDataVariable({ci.address, classType, true});
+        classComponent->AddDataVariable({ci.dataAddress, classDataType, true});
+        classComponent->AddDataVariable({ci.nameAddress, stringType(ci.name.size()), true});
         defineSymbol(bv, ci.listPointer, ci.name, "cp_");
         defineSymbol(bv, ci.address, ci.name, "cl_");
         addressToClassMap[ci.address] = ci.name;
@@ -264,6 +271,8 @@ void InfoHandler::applyInfoToView(SharedAnalysisInfo info, BinaryViewRef bv)
             defineReference(bv, mi.address, mi.implAddress);
 
             applyMethodType(bv, ci, methodSelfType, mi);
+
+            classComponent->AddFunction(bv->GetAnalysisFunction(bv->GetDefaultPlatform(), mi.implAddress));
         }
 
         if (ci.ivarListAddress != 0) {
@@ -288,6 +297,7 @@ void InfoHandler::applyInfoToView(SharedAnalysisInfo info, BinaryViewRef bv)
                 defineReference(bv, mi.address, mi.typeAddress);
                 defineReference(bv, mi.address, mi.implAddress);
                 applyMethodType(bv, ci.metaClassInfo->info, methodSelfType, mi);
+                classComponent->AddFunction(bv->GetAnalysisFunction(bv->GetDefaultPlatform(), mi.implAddress));
             }
         }
 
