@@ -56,7 +56,7 @@ void Commands::analyzeStructures(BinaryViewRef bv)
         log->LogError("Objective-C analysis will not be applied due to previous errors.");
     }
 
-    GlobalState::setFlag(bv, Flag::DidRunWorkflow);
+    GlobalState::setFlag(bv, Flag::DidRunStructureAnalysis);
 }
 
 void Commands::registerCommands()
