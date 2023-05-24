@@ -181,7 +181,7 @@ void InfoHandler::applyInfoToView(SharedAnalysisInfo info, BinaryViewRef bv)
 {
     auto start = Performance::now();
 
-    bv->BeginUndoActions();
+    auto undo = bv->BeginUndoActions();
 
     BinaryReader reader(bv);
 
@@ -330,7 +330,7 @@ void InfoHandler::applyInfoToView(SharedAnalysisInfo info, BinaryViewRef bv)
         }
     }
 
-    bv->CommitUndoActions();
+    bv->CommitUndoActions(undo);
     bv->UpdateAnalysis();
 
     auto elapsed = Performance::elapsed<std::chrono::milliseconds>(start);
