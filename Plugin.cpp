@@ -15,6 +15,13 @@ extern "C" {
 
 BN_DECLARE_CORE_ABI_VERSION
 
+BINARYNINJAPLUGIN void CorePluginDependencies()
+{
+    BinaryNinja::AddOptionalPluginDependency("arch_x86");
+    BinaryNinja::AddOptionalPluginDependency("arch_armv7");
+    BinaryNinja::AddOptionalPluginDependency("arch_arm64");
+}
+
 BINARYNINJAPLUGIN bool CorePluginInit()
 {
     TaggedPointerDataRenderer::Register();
